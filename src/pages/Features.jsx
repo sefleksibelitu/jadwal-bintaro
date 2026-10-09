@@ -39,14 +39,364 @@ export function UploadLink(){
  return <Shell title="Upload Link Sebar" desc="Maksimal 3 laporan link per hari, dihitung gabungan seluruh platform."><Notice text={msg} bad={bad}/><Card><form onSubmit={submit} className="p-5 grid md:grid-cols-3 gap-4"><div><label className="label">Tanggal</label><input className="input" type="date" value={date} onChange={e=>setDate(e.target.value)} required/></div><div><label className="label">Platform</label><select className="input" value={platform} onChange={e=>setPlatform(e.target.value)}>{['instagram','facebook','tiktok','olx','threads'].map(p=><option key={p} value={p}>{p[0].toUpperCase()+p.slice(1)}</option>)}</select></div><div><label className="label">Link postingan</label><input className="input" type="url" placeholder="https://…" value={url} onChange={e=>setUrl(e.target.value)} required/></div><div className="md:col-span-3 flex items-center justify-between gap-3"><span className="text-sm text-slate-500">Terpakai {rows.length}/3 link hari ini</span><button className="btn-primary" disabled={busy||rows.length>=3}>{busy?'Menyimpan…':'Kirim Link'}</button></div></form></Card><Card><div className="p-4 font-bold">Laporan tanggal {fmt(date)}</div><Table heads={['Platform','URL','Waktu','Aksi']}>{rows.map(r=><tr key={r.id}><td className={td}>{r.platform}</td><td className={`${td} max-w-64 truncate`}><a href={r.url} target="_blank" rel="noreferrer" className="text-blue-600 underline">{r.url}</a></td><td className={td}>{r.created_at?new Date(r.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}):'-'}</td><td className={td}><button className="text-red-600" onClick={()=>remove(r.id)}><Trash2 size={16}/></button></td></tr>)}{!rows.length&&<tr><td colSpan="4" className="px-4 py-6 text-center text-slate-500">Belum ada link dilaporkan.</td></tr>}</Table></Card></Shell>
 }
 
-export function KelolaAnggota(){
- const [rows,setRows]=useState([]);const [busy,setBusy]=useState(false);const [msg,setMsg]=useState('');const [bad,setBad]=useState(false);const [form,setForm]=useState({full_name:'',email:'',whatsapp:'',team_id:'1',role:'member'});const [editId,setEditId]=useState(null)
- async function load(){setBusy(true);const {data,error}=await supabase.from('profiles').select('id,full_name,email,whatsapp,team_id,role,is_active,created_at').order('full_name');setRows(data||[]);if(error){setBad(true);setMsg(errText(error))}setBusy(false)}useEffect(()=>{load()},[])
- async function save(e){e.preventDefault();setMsg('');setBad(false);try{if(editId){const {error}=await supabase.from('profiles').update({full_name:form.full_name,whatsapp:form.whatsapp,team_id:Number(form.team_id)}).eq('id',editId);if(error)throw error;setMsg('Profil anggota diperbarui.')}else{throw new Error('Pembuatan akun login harus melalui Supabase Auth atau Edge Function admin. Demi keamanan, browser tidak boleh menyimpan service-role key. Akun bisa dibuat di Supabase → Authentication → Users, lalu profilnya dibuat sesuai panduan SQL.')}setForm({full_name:'',email:'',whatsapp:'',team_id:'1',role:'member'});setEditId(null);await load()}catch(e){setBad(true);setMsg(errText(e))}}
- async function toggle(r){const {error}=await supabase.from('profiles').update({is_active:!r.is_active}).eq('id',r.id);if(error){setBad(true);setMsg(errText(error))}else{setMsg('Status anggota diperbarui.');load()}}
- function edit(r){setEditId(r.id);setForm({full_name:r.full_name||'',email:r.email||'',whatsapp:r.whatsapp||'',team_id:String(r.team_id||1),role:r.role||'member'});window.scrollTo({top:0,behavior:'smooth'})}
- return <Shell title="Kelola Anggota" desc="Atur profil, tim, nomor WhatsApp, dan status anggota." action={<button className="btn-secondary flex items-center gap-2" onClick={load}><RefreshCw size={16}/> Muat ulang</button>}><Notice text={msg} bad={bad}/><Card><form className="p-5 grid md:grid-cols-4 gap-3" onSubmit={save}><div><label className="label">Nama lengkap</label><input className="input" value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})} required/></div><div><label className="label">Email akun</label><input className="input" type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} disabled={!!editId} required/></div><div><label className="label">WhatsApp</label><input className="input" value={form.whatsapp} onChange={e=>setForm({...form,whatsapp:e.target.value})} placeholder="62812…"/></div><div><label className="label">Tim</label><select className="input" value={form.team_id} onChange={e=>setForm({...form,team_id:e.target.value})}><option value="1">Tim 1</option><option value="2">Tim 2</option></select></div><div className="md:col-span-4 flex flex-wrap gap-2"><button className="btn-primary flex items-center gap-2"><Plus size={16}/>{editId?'Simpan perubahan':'Panduan buat akun'}</button>{editId&&<button type="button" className="btn-secondary" onClick={()=>{setEditId(null);setForm({full_name:'',email:'',whatsapp:'',team_id:'1',role:'member'})}}>Batal edit</button>}</div></form></Card><Card><Table heads={['Anggota','Email','Tim','WhatsApp','Status','Aksi']}>{rows.map(r=><tr key={r.id}><td className={td}><div className="font-semibold">{r.full_name||'-'}</div><div className="text-xs text-slate-400">{r.role}</div></td><td className={td}>{r.email||'-'}</td><td className={td}>{r.team_id?`Tim ${r.team_id}`:'-'}</td><td className={td}>{r.whatsapp||'-'}</td><td className={td}><span className={`rounded-full px-2 py-1 text-xs ${r.is_active===false?'bg-red-50 text-red-600':'bg-emerald-50 text-emerald-700'}`}>{r.is_active===false?'Nonaktif':'Aktif'}</span></td><td className={td}><div className="flex gap-3"><button className="text-blue-600" onClick={()=>edit(r)}>Edit</button><button className="text-amber-700" onClick={()=>toggle(r)}>{r.is_active===false?'Aktifkan':'Nonaktifkan'}</button></div></td></tr>)}{!rows.length&&<tr><td colSpan="6" className="px-4 py-6 text-center text-slate-500">{busy?'Memuat anggota…':'Belum ada profil.'}</td></tr>}</Table></Card></Shell>
-}
+
+export function KelolaAnggota() {
+  const [rows, setRows] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [bad, setBad] = useState(false)
+  const [form, setForm] = useState({
+    full_name: '',
+    email: '',
+    password: '',
+    whatsapp: '',
+    team_id: '1',
+  })
+  const [editId, setEditId] = useState(null)
+
+  async function load() {
+    setBusy(true)
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id,full_name,email,whatsapp,team_id,role,is_active,created_at')
+      .order('full_name')
+
+    setRows(data || [])
+
+    if (error) {
+      setBad(true)
+      setMsg(errText(error))
+    }
+
+    setBusy(false)
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  function resetForm() {
+    setEditId(null)
+    setForm({
+      full_name: '',
+      email: '',
+      password: '',
+      whatsapp: '',
+      team_id: '1',
+    })
+  }
+
+  async function save(e) {
+    e.preventDefault()
+    setBusy(true)
+    setMsg('')
+    setBad(false)
+
+    try {
+      if (editId) {
+        // Update profil anggota yang sudah ada.
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            full_name: form.full_name.trim(),
+            whatsapp: form.whatsapp.trim() || null,
+            team_id: Number(form.team_id),
+          })
+          .eq('id', editId)
+
+        if (error) throw error
+
+        setMsg('Profil anggota berhasil diperbarui.')
+      } else {
+        // Buat akun login melalui Supabase Edge Function.
+        if (!form.password || form.password.length < 8) {
+          throw new Error('Password wajib diisi, minimal 8 karakter.')
+        }
+
+        const { data, error } = await supabase.functions.invoke(
+          'create-member',
+          {
+            body: {
+              full_name: form.full_name.trim(),
+              email: form.email.trim().toLowerCase(),
+              password: form.password,
+              whatsapp: form.whatsapp.trim() || null,
+              team_id: form.team_id,
+            },
+          }
+        )
+
+        if (error) {
+          let detail = error.message || 'Gagal memanggil Edge Function.'
+
+          try {
+            const context = error.context
+            if (context && typeof context.json === 'function') {
+              const body = await context.json()
+              if (body?.error) detail = body.error
+            }
+          } catch {
+            // Gunakan pesan error awal jika respons bukan JSON.
+          }
+
+          throw new Error(detail)
+        }
+
+        if (data?.error || !data?.success) {
+          throw new Error(data?.error || 'Akun anggota gagal dibuat.')
+        }
+
+        setMsg('Akun login dan profil anggota berhasil dibuat.')
+      }
+
+      resetForm()
+      await load()
+    } catch (e) {
+      setBad(true)
+      setMsg(errText(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function toggle(r) {
+    setMsg('')
+    setBad(false)
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_active: !r.is_active })
+      .eq('id', r.id)
+
+    if (error) {
+      setBad(true)
+      setMsg(errText(error))
+    } else {
+      setMsg('Status anggota berhasil diperbarui.')
+      await load()
+    }
+  }
+
+  function edit(r) {
+    setEditId(r.id)
+    setForm({
+      full_name: r.full_name || '',
+      email: r.email || '',
+      password: '',
+      whatsapp: r.whatsapp || '',
+      team_id: String(r.team_id || 1),
+    })
+
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  return (
+    <Shell
+      title="Kelola Anggota"
+      desc="Buat akun login, atur profil, tim, WhatsApp, dan status anggota."
+      action={
+        <button
+          type="button"
+          className="btn-secondary flex items-center gap-2"
+          onClick={load}
+          disabled={busy}
+        >
+          <RefreshCw size={16} />
+          Muat ulang
+        </button>
+      }
+    >
+      <Notice text={msg} bad={bad} />
+
+      <Card>
+        <form className="p-5 grid md:grid-cols-2 gap-4" onSubmit={save}>
+          <div>
+            <label className="label">Nama lengkap</label>
+            <input
+              className="input"
+              value={form.full_name}
+              onChange={(e) =>
+                setForm({ ...form, full_name: e.target.value })
+              }
+              required
+            />
+          </div>
+
+          <div>
+            <label className="label">Email akun</label>
+            <input
+              className="input"
+              type="email"
+              value={form.email}
+              onChange={(e) =>
+                setForm({ ...form, email: e.target.value })
+              }
+              disabled={!!editId}
+              required
+            />
+          </div>
+
+          {!editId && (
+            <div>
+              <label className="label">Password akun</label>
+              <input
+                className="input"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                maxLength={72}
+                value={form.password}
+                onChange={(e) =>
+                  setForm({ ...form, password: e.target.value })
+                }
+                placeholder="Minimal 8 karakter"
+                required
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Berikan password ini kepada anggota secara aman.
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="label">WhatsApp</label>
+            <input
+              className="input"
+              type="tel"
+              value={form.whatsapp}
+              onChange={(e) =>
+                setForm({ ...form, whatsapp: e.target.value })
+              }
+              placeholder="62812..."
+            />
+          </div>
+
+          <div>
+            <label className="label">Tim</label>
+            <select
+              className="input"
+              value={form.team_id}
+              onChange={(e) =>
+                setForm({ ...form, team_id: e.target.value })
+              }
+              required
+            >
+              <option value="1">Tim 1</option>
+              <option value="2">Tim 2</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-2 flex flex-wrap gap-2">
+            <button
+              type="submit"
+              className="btn-primary flex items-center gap-2"
+              disabled={busy}
+            >
+              <Plus size={16} />
+              {busy
+                ? 'Memproses...'
+                : editId
+                  ? 'Simpan perubahan'
+                  : 'Buat akun anggota'}
+            </button>
+
+            {editId && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={resetForm}
+                disabled={busy}
+              >
+                Batal edit
+              </button>
+            )}
+          </div>
+        </form>
+      </Card>
+
+      <Card>
+        <Table
+          heads={[
+            'Anggota',
+            'Email',
+            'Tim',
+            'WhatsApp',
+            'Status',
+            'Aksi',
+          ]}
+        >
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td className={td}>
+                <div className="font-semibold">
+                  {r.full_name || '-'}
+                </div>
+                <div className="text-xs text-slate-400">
+                  {r.role}
+                </div>
+              </td>
+
+              <td className={td}>{r.email || '-'}</td>
+
+              <td className={td}>
+                {r.team_id ? `Tim ${r.team_id}` : '-'}
+              </td>
+
+              <td className={td}>{r.whatsapp || '-'}</td>
+
+              <td className={td}>
+                <span
+                  className={`rounded-full px-2 py-1 text-xs ${
+                    r.is_active === false
+                      ? 'bg-red-50 text-red-600'
+                      : 'bg-emerald-50 text-emerald-700'
+                  }`}
+                >
+                  {r.is_active === false ? 'Nonaktif' : 'Aktif'}
+                </span>
+              </td>
+
+              <td className={td}>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    className="text-blue-600"
+                    onClick={() => edit(r)}
+                  >
+                    Edit
+                  </button>
+
+                  <button
+                    type="button"
+                    className="text-amber-700"
+                    onClick={() => toggle(r)}
+                  >
+                    {r.is_active === false
+                      ? 'Aktifkan'
+                      : 'Nonaktifkan'}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+
+          {!rows.length && (
+            <tr>
+              <td
+                colSpan="6"
+                className="px-4 py-6 text-center text-slate-500"
+              >
+                {busy
+                  ? 'Memuat anggota...'
+                  : 'Belum ada profil anggota.'}
+              </td>
+            </tr>
+          )}
+        </Table>
+      </Card>
+    </Shell>
+  )
+           }
 
 export function GenerateJadwal(){
  const [members,setMembers]=useState([]);const [holidays,setHolidays]=useState([]);const [month,setMonth]=useState(today().slice(0,7));const [start,setStart]=useState('');const [holidayUser,setHolidayUser]=useState('');const [holidayDate,setHolidayDate]=useState(today());const [holidayNote,setHolidayNote]=useState('');const [msg,setMsg]=useState('');const [bad,setBad]=useState(false);const [busy,setBusy]=useState(false)
