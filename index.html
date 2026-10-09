@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/jadwal-bintaro/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#3b82f6" />
+    <title>Tim Bintaro — Absensi & Jadwal Sebar</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <script>
+(function () {
+  function showError(title, message) {
+    var box = document.createElement('pre');
+    box.style.cssText =
+      'position:fixed;z-index:999999;top:0;left:0;right:0;bottom:0;' +
+      'margin:0;padding:20px;background:#111;color:#ff5555;' +
+      'white-space:pre-wrap;word-break:break-word;' +
+      'font:14px monospace;overflow:auto;';
+    box.textContent = title + '\n\n' + message;
+    document.documentElement.appendChild(box);
+  }
+
+  window.addEventListener('error', function (e) {
+    showError(
+      'JAVASCRIPT ERROR',
+      (e.error && e.error.stack) || e.message || String(e)
+    );
+  });
+
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    showError(
+      'PROMISE ERROR',
+      (r && r.stack) || (r && r.message) || String(r)
+    );
+  });
+})();
+</script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
