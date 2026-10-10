@@ -40,7 +40,32 @@
 </script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+  <div id="root"></div>
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var redirect = params.get('redirect');
+
+      if (redirect) {
+        try {
+          var target = new URL(redirect, window.location.origin);
+          var base = '/jadwal-bintaro/';
+
+          if (target.pathname.startsWith(base)) {
+            window.history.replaceState(
+              null,
+              '',
+              target.pathname + target.search + target.hash
+            );
+          }
+        } catch (e) {
+          console.error('Pemulihan URL gagal:', e);
+        }
+      }
+    })();
+  </script>
+
+  <script type="module" src="/src/main.jsx"></script>
+</body>
 </html>
