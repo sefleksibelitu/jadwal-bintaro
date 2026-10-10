@@ -397,7 +397,7 @@ export function KelolaAnggota() {
     </Shell>
   )
            }
-aexport function GenerateJadwal() {
+export function GenerateJadwal() {
   const [members, setMembers] = useState([])
   const [holidays, setHolidays] = useState([])
   const [month, setMonth] = useState(today().slice(0, 7))
