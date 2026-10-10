@@ -915,9 +915,425 @@ export function GenerateJadwal() {
   )
 }
 
-export function Laporan(){
- const [month,setMonth]=useState(today().slice(0,7));const [profiles,setProfiles]=useState([]);const [attendance,setAttendance]=useState([]);const [links,setLinks]=useState([]);const [busy,setBusy]=useState(false);const [msg,setMsg]=useState('')
- async function load(){setBusy(true);const from=`${month}-01`;const to=`${month}-${new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).getDate()}`;const [p,a,l]=await Promise.all([supabase.from('profiles').select('id,full_name,whatsapp,team_id,role,is_active').eq('role','member'),supabase.from('attendance').select('*').gte('attendance_date',from).lte('attendance_date',to),supabase.from('content_links').select('*').gte('link_date',from).lte('link_date',to)]);setProfiles(p.data||[]);setAttendance(a.data||[]);setLinks(l.data||[]);setMsg([p.error,a.error,l.error].filter(Boolean).map(errText).join(' • '));setBusy(false)}useEffect(()=>{load()},[month])
- const stats=useMemo(()=>profiles.map(p=>{const at=attendance.filter(a=>a.user_id===p.id).length;const li=links.filter(l=>l.user_id===p.id).length;const days=new Set(links.filter(l=>l.user_id===p.id).map(l=>l.link_date));const compliant=days.size?Math.min(100,Math.round([...days].filter(d=>links.filter(l=>l.user_id===p.id&&l.link_date===d).length>=3).length/days.size*100)):0;return {...p,at,li,compliant}}),[profiles,attendance,links])
- return <Shell title="Laporan & KPI" desc="Pantau absensi, jumlah link, dan hubungi anggota yang belum lengkap." action={<div className="flex gap-2"><input className="input" type="month" value={month} onChange={e=>setMonth(e.target.value)}/><button className="btn-secondary" onClick={load}><RefreshCw size={16}/></button></div>}><Notice text={msg} bad={!!msg}/><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{[{l:'Anggota',v:profiles.length},{l:'Absensi',v:attendance.length},{l:'Link terlapor',v:links.length},{l:'Belum 3 link/hari',v:stats.filter(s=>s.compliant<100).length}].map(s=><Card key={s.l}><div className="p-4"><div className="text-xs text-slate-500">{s.l}</div><div className="text-2xl font-extrabold mt-1">{s.v}</div></div></Card>)}</div><Card><Table heads={['Anggota','Tim','Absensi','Link','Kepatuhan link','WhatsApp']}>{stats.map(p=><tr key={p.id}><td className={td}><div className="font-semibold">{p.full_name}</div></td><td className={td}>{p.team_id||'-'}</td><td className={td}>{p.at}</td><td className={td}>{p.li}</td><td className={td}><span className={`rounded-full px-2 py-1 text-xs ${p.compliant===100?'bg-emerald-50 text-emerald-700':'bg-amber-50 text-amber-800'}`}>{p.compliant}%</span></td><td className={td}>{p.whatsapp&&p.compliant<100?<a className="text-emerald-700 underline" href={buildWhatsAppLink(p.whatsapp,buildReminderMessage(p.full_name,'upload link hari ini'))} target="_blank" rel="noreferrer">Ingatkan WA</a>:'-'}</td></tr>)}{!stats.length&&<tr><td colSpan="6" className="px-4 py-6 text-center text-slate-500">{busy?'Memuat laporan…':'Belum ada data.'}</td></tr>}</Table></Card><p className="text-xs text-slate-500">KPI link dihitung dari hari yang memiliki laporan: 100% jika setiap hari yang dilaporkan memiliki 3 link. Untuk KPI berdasarkan seluruh hari sebar terjadwal, gunakan view v_user_compliance yang tersedia di database.</p></Shell>
+
+export function Laporan() {
+  const [month, setMonth] = useState(today().slice(0, 7))
+  const [day, setDay] = useState('')
+  const [memberId, setMemberId] = useState('all')
+  const [type, setType] = useState('all')
+  const [profiles, setProfiles] = useState([])
+  const [attendance, setAttendance] = useState([])
+  const [links, setLinks] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [bad, setBad] = useState(false)
+
+  async function load() {
+    setBusy(true)
+    setMsg('')
+    setBad(false)
+
+    const from = `${month}-01`
+    const lastDay = new Date(
+      Number(month.slice(0, 4)),
+      Number(month.slice(5, 7)),
+      0
+    ).getDate()
+    const to = `${month}-${String(lastDay).padStart(2, '0')}`
+
+    const [p, a, l] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id,full_name,whatsapp,team_id,role,is_active')
+        .eq('role', 'member')
+        .order('full_name'),
+
+      supabase
+        .from('attendance')
+        .select('*')
+        .gte('attendance_date', from)
+        .lte('attendance_date', to)
+        .order('attendance_date', { ascending: false }),
+
+      supabase
+        .from('content_links')
+        .select('*')
+        .gte('link_date', from)
+        .lte('link_date', to)
+        .order('link_date', { ascending: false })
+    ])
+
+    const errors = [p.error, a.error, l.error].filter(Boolean)
+
+    setProfiles(p.data || [])
+    setAttendance(a.data || [])
+    setLinks(l.data || [])
+
+    if (errors.length) {
+      setBad(true)
+      setMsg(errors.map(errText).join(' • '))
+    }
+
+    setBusy(false)
+  }
+
+  useEffect(() => {
+    load()
+  }, [month])
+
+  const names = useMemo(
+    () => Object.fromEntries(
+      profiles.map(p => [p.id, p.full_name || 'Anggota'])
+    ),
+    [profiles]
+  )
+
+  const filteredAttendance = useMemo(
+    () => attendance.filter(r =>
+      (memberId === 'all' || r.user_id === memberId) &&
+      (!day || r.attendance_date === day)
+    ),
+    [attendance, memberId, day]
+  )
+
+  const filteredLinks = useMemo(
+    () => links.filter(r =>
+      (memberId === 'all' || r.user_id === memberId) &&
+      (!day || r.link_date === day)
+    ),
+    [links, memberId, day]
+  )
+
+  const stats = useMemo(() => profiles.map(p => {
+    const at = attendance.filter(r => r.user_id === p.id).length
+    const li = links.filter(r => r.user_id === p.id).length
+    const days = new Set(
+      links.filter(r => r.user_id === p.id).map(r => r.link_date)
+    )
+    const compliant = days.size
+      ? Math.round(
+          [...days].filter(d =>
+            links.filter(r =>
+              r.user_id === p.id && r.link_date === d
+            ).length >= 3
+          ).length / days.size * 100
+        )
+      : 0
+
+    return { ...p, at, li, compliant }
+  }), [profiles, attendance, links])
+
+  async function deleteLink(row) {
+    if (!confirm(
+      `Hapus laporan link milik ${names[row.user_id] || 'anggota'} tanggal ${fmt(row.link_date)}?`
+    )) return
+
+    const { error } = await supabase
+      .from('content_links')
+      .delete()
+      .eq('id', row.id)
+
+    if (error) {
+      setBad(true)
+      setMsg(errText(error))
+      return
+    }
+
+    setMsg('Laporan link berhasil dihapus.')
+    await load()
+  }
+
+  async function deleteAttendance(row) {
+    if (!confirm(
+      `Hapus absensi milik ${names[row.user_id] || 'anggota'} tanggal ${fmt(row.attendance_date)}? Foto absensi juga akan dihapus jika file ditemukan.`
+    )) return
+
+    setBusy(true)
+    setMsg('')
+    setBad(false)
+
+    try {
+      // Hapus file foto dari bucket jika URL berasal dari bucket ini.
+      if (row.photo_url) {
+        const marker = '/storage/v1/object/public/attendance-photos/'
+        const index = row.photo_url.indexOf(marker)
+
+        if (index !== -1) {
+          const path = decodeURIComponent(
+            row.photo_url.slice(index + marker.length).split('?')[0]
+          )
+
+          const { error: storageError } = await supabase
+            .storage
+            .from('attendance-photos')
+            .remove([path])
+
+          if (storageError) throw storageError
+        }
+      }
+
+      const { error } = await supabase
+        .from('attendance')
+        .delete()
+        .eq('id', row.id)
+
+      if (error) throw error
+
+      setMsg('Laporan absensi berhasil dihapus.')
+      await load()
+    } catch (e) {
+      setBad(true)
+      setMsg(errText(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Shell
+      title="Laporan & KPI"
+      desc="Pantau laporan link, foto absensi, lokasi, dan kepatuhan anggota."
+      action={
+        <button
+          type="button"
+          className="btn-secondary flex items-center gap-2"
+          onClick={load}
+          disabled={busy}
+        >
+          <RefreshCw size={16} />
+          Muat ulang
+        </button>
+      }
+    >
+      <Notice text={msg} bad={bad} />
+
+      <Card>
+        <div className="p-4 grid sm:grid-cols-3 gap-3">
+          <div>
+            <label className="label">Bulan laporan</label>
+            <input
+              className="input"
+              type="month"
+              value={month}
+              onChange={e => {
+                setMonth(e.target.value)
+                setDay('')
+              }}
+            />
+          </div>
+
+          <div>
+            <label className="label">Tanggal tertentu (opsional)</label>
+            <input
+              className="input"
+              type="date"
+              min={`${month}-01`}
+              max={`${month}-${String(
+                new Date(
+                  Number(month.slice(0, 4)),
+                  Number(month.slice(5, 7)),
+                  0
+                ).getDate()
+              ).padStart(2, '0')}`}
+              value={day}
+              onChange={e => setDay(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="label">Anggota</label>
+            <select
+              className="input"
+              value={memberId}
+              onChange={e => setMemberId(e.target.value)}
+            >
+              <option value="all">Semua anggota</option>
+              {profiles.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name || p.id}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { label: 'Anggota', value: profiles.length },
+          {
+            label: 'Absensi',
+            value: filteredAttendance.length
+          },
+          { label: 'Link terlapor', value: filteredLinks.length },
+          {
+            label: 'Anggota belum 100%',
+            value: stats.filter(p => p.compliant < 100).length
+          }
+        ].map(s => (
+          <Card key={s.label}>
+            <div className="p-4">
+              <p className="text-xs text-slate-500">{s.label}</p>
+              <p className="text-2xl font-extrabold mt-1">{s.value}</p>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <div className="p-4 border-b border-slate-100">
+          <h2 className="font-bold">Ringkasan per anggota</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Kepatuhan di bawah ini dihitung dari hari yang memiliki laporan link, bukan seluruh hari kerja terjadwal.
+          </p>
+        </div>
+
+        <Table heads={[
+          'Anggota', 'Tim', 'Absensi', 'Link', 'Kepatuhan'
+        ]}>
+          {stats
+            .filter(p => memberId === 'all' || p.id === memberId)
+            .map(p => (
+              <tr key={p.id}>
+                <td className={td}>{p.full_name || '-'}</td>
+                <td className={td}>{p.team_id || '-'}</td>
+                <td className={td}>
+                  {attendance.filter(r => r.user_id === p.id).length}
+                </td>
+                <td className={td}>
+                  {links.filter(r => r.user_id === p.id).length}
+                </td>
+                <td className={td}>{p.compliant}%</td>
+              </tr>
+            ))}
+        </Table>
+      </Card>
+
+      <Card>
+        <div className="p-4 border-b border-slate-100 flex flex-wrap justify-between gap-3">
+          <div>
+            <h2 className="font-bold">Detail laporan link</h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Periksa nama anggota, tanggal, platform, dan postingan.
+            </p>
+          </div>
+          <select
+            className="input"
+            value={type}
+            onChange={e => setType(e.target.value)}
+          >
+            <option value="all">Semua platform</option>
+            {['instagram', 'facebook', 'tiktok', 'olx', 'threads'].map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </div>
+
+        <Table heads={[
+          'Anggota', 'Tanggal', 'Platform', 'Link postingan', 'Aksi'
+        ]}>
+          {filteredLinks
+            .filter(r => type === 'all' || r.platform === type)
+            .map(r => (
+              <tr key={r.id}>
+                <td className={td}>{names[r.user_id] || 'Anggota'}</td>
+                <td className={td}>{fmt(r.link_date)}</td>
+                <td className={td}>{r.platform}</td>
+                <td className={`${td} max-w-56`}>
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 underline break-all"
+                  >
+                    Buka postingan <ExternalLink size={13} className="inline" />
+                  </a>
+                </td>
+                <td className={td}>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="text-red-600"
+                    onClick={() => deleteLink(r)}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          {!filteredLinks.filter(r => type === 'all' || r.platform === type).length && (
+            <tr>
+              <td colSpan="5" className="px-4 py-6 text-center text-slate-500">
+                Tidak ada laporan link untuk filter ini.
+              </td>
+            </tr>
+          )}
+        </Table>
+      </Card>
+
+      <Card>
+        <div className="p-4 border-b border-slate-100">
+          <h2 className="font-bold">Detail absensi sebar</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Lihat foto, catatan, dan lokasi yang dikirim anggota.
+          </p>
+        </div>
+
+        <Table heads={[
+          'Anggota', 'Tanggal', 'Foto', 'Lokasi', 'Catatan', 'Aksi'
+        ]}>
+          {filteredAttendance.map(r => (
+            <tr key={r.id}>
+              <td className={td}>
+                {names[r.user_id] || r.full_name_input || 'Anggota'}
+              </td>
+              <td className={td}>{fmt(r.attendance_date)}</td>
+              <td className={td}>
+                {r.photo_url ? (
+                  <a
+                    href={r.photo_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 underline"
+                  >
+                    Lihat foto
+                  </a>
+                ) : '-'}
+              </td>
+              <td className={td}>
+                {r.maps_link ? (
+                  <a
+                    href={r.maps_link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 underline inline-flex items-center gap-1"
+                  >
+                    <MapPin size={14} /> Buka peta
+                  </a>
+                ) : '-'}
+              </td>
+              <td className={td}>{r.note || '-'}</td>
+              <td className={td}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="text-red-600"
+                  onClick={() => deleteAttendance(r)}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </td>
+            </tr>
+          ))}
+          {!filteredAttendance.length && (
+            <tr>
+              <td colSpan="6" className="px-4 py-6 text-center text-slate-500">
+                Tidak ada absensi untuk filter ini.
+              </td>
+            </tr>
+          )}
+        </Table>
+      </Card>
+    </Shell>
+  )
 }
