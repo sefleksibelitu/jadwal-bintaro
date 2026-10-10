@@ -397,14 +397,522 @@ export function KelolaAnggota() {
     </Shell>
   )
            }
+aexport function GenerateJadwal() {
+  const [members, setMembers] = useState([])
+  const [holidays, setHolidays] = useState([])
+  const [month, setMonth] = useState(today().slice(0, 7))
+  const [start, setStart] = useState('')
+  const [holidayUser, setHolidayUser] = useState('')
+  const [holidayDay, setHolidayDay] = useState('1')
+  const [holidayNote, setHolidayNote] = useState('Libur rutin')
+  const [msg, setMsg] = useState('')
+  const [bad, setBad] = useState(false)
+  const [busy, setBusy] = useState(false)
 
-export function GenerateJadwal(){
- const [members,setMembers]=useState([]);const [holidays,setHolidays]=useState([]);const [month,setMonth]=useState(today().slice(0,7));const [start,setStart]=useState('');const [holidayUser,setHolidayUser]=useState('');const [holidayDate,setHolidayDate]=useState(today());const [holidayNote,setHolidayNote]=useState('');const [msg,setMsg]=useState('');const [bad,setBad]=useState(false);const [busy,setBusy]=useState(false)
- async function load(){const a=await supabase.from('profiles').select('id,full_name,team_id,is_active').eq('role','member').order('full_name');setMembers((a.data||[]).filter(x=>x.is_active!==false));const h=await supabase.from('holidays').select('*').gte('holiday_date',`${month}-01`).lte('holiday_date',`${month}-31`).order('holiday_date');setHolidays(h.data||[]);if(!holidayUser&&a.data?.length)setHolidayUser(a.data[0].id)}useEffect(()=>{load()},[month])
- async function addHoliday(e){e.preventDefault();setMsg('');setBad(false);const {error}=await supabase.from('holidays').insert({user_id:holidayUser,holiday_date:holidayDate,month_period:`${holidayDate.slice(0,7)}-01`,note:holidayNote});if(error){setBad(true);setMsg(errText(error))}else{setMsg('Hari libur disimpan.');setHolidayNote('');load()}}
- async function deleteHoliday(id){const {error}=await supabase.from('holidays').delete().eq('id',id);if(error){setBad(true);setMsg(errText(error))}else load()}
- async function generate(e){e.preventDefault();setBusy(true);setMsg('');setBad(false);try{if(members.length<3)throw new Error('Minimal 3 anggota aktif diperlukan agar ada yang bertugas di toko dan sebar.');const [y,m]=month.split('-').map(Number);const days=new Date(y,m,0).getDate();const from=start?Number(start.slice(-2)):1;if(from<1||from>days)throw new Error('Tanggal mulai tidak valid.');const dates=Array.from({length:days-from+1},(_,i)=>new Date(y,m-1,from+i)).filter(d=>d.getDay()!==0&&d.getDay()!==6);const holidayRows=(await supabase.from('holidays').select('user_id,holiday_date').gte('holiday_date',`${month}-01`).lte('holiday_date',`${month}-${String(days).padStart(2,'0')}`)).data||[];const off=new Set(holidayRows.map(h=>`${h.user_id}|${h.holiday_date}`));const sorted=[...members].sort((a,b)=>(a.team_id||1)-(b.team_id||1));const workload=Object.fromEntries(sorted.map(x=>[x.id,0]));const inserts=[];for(const d of dates){const ds=`${y}-${String(m).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;const eligible=sorted.filter(x=>!off.has(`${x.id}|${ds}`));if(eligible.length<3)continue;const ranked=[...eligible].sort((a,b)=>workload[a.id]-workload[b.id]);const store=ranked.slice(0,Math.min(3,Math.max(2,eligible.length-2)));const sebar=ranked.filter(x=>!store.some(s=>s.id===x.id));for(const p of store){inserts.push({user_id:p.id,team_id:p.team_id||1,schedule_date:ds,week_number:Math.floor((d.getDate()-1)/7)+1,role_in_day:'Toko',status:'scheduled'});workload[p.id]++}for(const p of sebar){if(d.getDay()>=1&&d.getDay()<=4){inserts.push({user_id:p.id,team_id:p.team_id||1,schedule_date:ds,week_number:Math.floor((d.getDate()-1)/7)+1,role_in_day:'Sebar',status:'scheduled'});workload[p.id]++}else{inserts.push({user_id:p.id,team_id:p.team_id||1,schedule_date:ds,week_number:Math.floor((d.getDate()-1)/7)+1,role_in_day:'Toko',status:'scheduled'});workload[p.id]++}}}if(!inserts.length)throw new Error('Tidak ada jadwal yang dapat dibuat untuk rentang ini.');const del=await supabase.from('schedules').delete().gte('schedule_date',`${month}-${String(from).padStart(2,'0')}`).lte('schedule_date',`${month}-${String(days).padStart(2,'0')}`);if(del.error)throw del.error;for(let i=0;i<inserts.length;i+=400){const result=await supabase.from('schedules').insert(inserts.slice(i,i+400));if(result.error)throw result.error}setMsg(`Berhasil membuat ${inserts.length} entri jadwal untuk ${month}. Distribusi beban: ${sorted.map(p=>`${p.full_name}: ${workload[p.id]}`).join(' • ')}`)}catch(e){setBad(true);setMsg(errText(e))}finally{setBusy(false)}}
- return <Shell title="Generate Jadwal Bulanan" desc="Buat jadwal manual, kelola libur anggota, dan seimbangkan beban kerja."><Notice text={msg} bad={bad}/><Card><form className="p-5 flex flex-wrap items-end gap-3" onSubmit={generate}><div><label className="label">Bulan jadwal</label><input className="input" type="month" value={month} onChange={e=>setMonth(e.target.value)} required/></div><div><label className="label">Mulai dari tanggal (opsional)</label><input className="input" type="date" value={start} min={`${month}-01`} max={`${month}-31`} onChange={e=>setStart(e.target.value)}/></div><button className="btn-primary" disabled={busy}>{busy?'Membuat jadwal…':'Generate Jadwal'}</button></form><p className="px-5 pb-5 text-xs text-slate-500">Minggu akhir pekan tidak dijadwalkan untuk sebar; sebar hanya Senin–Kamis. Jadwal rentang yang dipilih akan diganti. Pastikan kalender dan hari libur benar sebelum generate.</p></Card><Card><div className="p-5 border-b border-slate-100"><h2 className="font-bold">Tambah hari libur anggota</h2></div><form className="p-5 grid md:grid-cols-4 gap-3" onSubmit={addHoliday}><div><label className="label">Anggota</label><select className="input" value={holidayUser} onChange={e=>setHolidayUser(e.target.value)} required>{members.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</select></div><div><label className="label">Tanggal libur</label><input className="input" type="date" value={holidayDate} onChange={e=>setHolidayDate(e.target.value)} required/></div><div><label className="label">Catatan</label><input className="input" value={holidayNote} onChange={e=>setHolidayNote(e.target.value)} placeholder="Cuti / izin"/></div><div className="flex items-end"><button className="btn-secondary flex items-center gap-2"><Plus size={16}/> Simpan libur</button></div></form><Table heads={['Anggota','Tanggal','Catatan','Aksi']}>{holidays.map(h=><tr key={h.id}><td className={td}>{members.find(p=>p.id===h.user_id)?.full_name||h.user_id}</td><td className={td}>{fmt(h.holiday_date)}</td><td className={td}>{h.note||'-'}</td><td className={td}><button className="text-red-600" onClick={()=>deleteHoliday(h.id)}><Trash2 size={16}/></button></td></tr>)}{!holidays.length&&<tr><td colSpan="4" className="px-4 py-6 text-center text-slate-500">Belum ada hari libur bulan ini.</td></tr>}</Table></Card></Shell>
+  const dayNames = [
+    'Minggu',
+    'Senin',
+    'Selasa',
+    'Rabu',
+    'Kamis',
+    'Jumat',
+    'Sabtu',
+  ]
+
+  async function load() {
+    const [memberResult, holidayResult] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id,full_name,team_id,is_active')
+        .eq('role', 'member')
+        .order('full_name'),
+
+      supabase
+        .from('holidays')
+        .select('*')
+        .gte('holiday_date', `${month}-01`)
+        .lte(
+          'holiday_date',
+          `${month}-${String(
+            new Date(
+              Number(month.slice(0, 4)),
+              Number(month.slice(5, 7)),
+              0
+            ).getDate()
+          ).padStart(2, '0')}`
+        )
+        .order('holiday_date'),
+    ])
+
+    if (memberResult.error) {
+      setBad(true)
+      setMsg(errText(memberResult.error))
+      return
+    }
+
+    if (holidayResult.error) {
+      setBad(true)
+      setMsg(errText(holidayResult.error))
+      return
+    }
+
+    const activeMembers = (memberResult.data || []).filter(
+      (member) => member.is_active !== false
+    )
+
+    setMembers(activeMembers)
+    setHolidays(holidayResult.data || [])
+
+    setHolidayUser((current) =>
+      activeMembers.some((member) => member.id === current)
+        ? current
+        : activeMembers[0]?.id || ''
+    )
+  }
+
+  useEffect(() => {
+    load()
+  }, [month])
+
+  async function addHoliday(e) {
+    e.preventDefault()
+    setBusy(true)
+    setMsg('')
+    setBad(false)
+
+    try {
+      if (!holidayUser) {
+        throw new Error('Pilih anggota terlebih dahulu.')
+      }
+
+      const [year, monthNumber] = month.split('-').map(Number)
+      const totalDays = new Date(year, monthNumber, 0).getDate()
+      const weekday = Number(holidayDay)
+
+      const dates = []
+
+      for (let day = 1; day <= totalDays; day++) {
+        const date = new Date(year, monthNumber - 1, day)
+
+        if (date.getDay() === weekday) {
+          dates.push(
+            `${year}-${String(monthNumber).padStart(2, '0')}-${String(
+              day
+            ).padStart(2, '0')}`
+          )
+        }
+      }
+
+      if (!dates.length) {
+        throw new Error('Tidak ditemukan tanggal untuk hari tersebut.')
+      }
+
+      const existing = holidays.filter(
+        (holiday) => holiday.user_id === holidayUser
+      )
+
+      const inserts = dates
+        .filter(
+          (date) =>
+            !existing.some((holiday) => holiday.holiday_date === date)
+        )
+        .map((date) => ({
+          user_id: holidayUser,
+          holiday_date: date,
+          month_period: `${month}-01`,
+          note: `${holidayNote.trim() || 'Libur rutin'} (${dayNames[weekday]})`,
+        }))
+
+      if (!inserts.length) {
+        throw new Error(
+          `Libur ${dayNames[weekday]} untuk anggota ini sudah tercatat pada bulan tersebut.`
+        )
+      }
+
+      const { error } = await supabase.from('holidays').insert(inserts)
+
+      if (error) throw error
+
+      setMsg(
+        `Berhasil menyimpan ${inserts.length} tanggal libur setiap ${dayNames[weekday]} untuk bulan ${month}.`
+      )
+
+      await load()
+    } catch (error) {
+      setBad(true)
+      setMsg(errText(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function deleteHoliday(id) {
+    if (!confirm('Hapus tanggal libur ini?')) return
+
+    const { error } = await supabase
+      .from('holidays')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      setBad(true)
+      setMsg(errText(error))
+    } else {
+      setMsg('Tanggal libur berhasil dihapus.')
+      await load()
+    }
+  }
+
+  async function generate(e) {
+    e.preventDefault()
+    setBusy(true)
+    setMsg('')
+    setBad(false)
+
+    try {
+      if (members.length < 3) {
+        throw new Error(
+          'Minimal 3 anggota aktif diperlukan untuk pembagian tugas Toko dan Sebar.'
+        )
+      }
+
+      const [year, monthNumber] = month.split('-').map(Number)
+      const totalDays = new Date(year, monthNumber, 0).getDate()
+      const from = start ? Number(start.slice(-2)) : 1
+
+      if (
+        start &&
+        !start.startsWith(`${month}-`)
+      ) {
+        throw new Error(
+          'Tanggal mulai harus berada pada bulan jadwal yang dipilih.'
+        )
+      }
+
+      if (from < 1 || from > totalDays) {
+        throw new Error('Tanggal mulai tidak valid.')
+      }
+
+      const { data: holidayRows, error: holidayError } = await supabase
+        .from('holidays')
+        .select('user_id,holiday_date')
+        .gte('holiday_date', `${month}-01`)
+        .lte(
+          'holiday_date',
+          `${month}-${String(totalDays).padStart(2, '0')}`
+        )
+
+      if (holidayError) throw holidayError
+
+      const off = new Set(
+        (holidayRows || []).map(
+          (holiday) => `${holiday.user_id}|${holiday.holiday_date}`
+        )
+      )
+
+      const dates = []
+
+      for (let day = from; day <= totalDays; day++) {
+        const date = new Date(year, monthNumber - 1, day)
+
+        // Sabtu dan Minggu tidak dijadwalkan.
+        if (date.getDay() === 0 || date.getDay() === 6) continue
+
+        dates.push({
+          date,
+          dateString: `${year}-${String(monthNumber).padStart(
+            2,
+            '0'
+          )}-${String(day).padStart(2, '0')}`,
+          day,
+        })
+      }
+
+      if (!dates.length) {
+        throw new Error(
+          'Tidak ada hari kerja pada rentang tanggal yang dipilih.'
+        )
+      }
+
+      const sorted = [...members].sort((a, b) =>
+        (a.full_name || '').localeCompare(b.full_name || '')
+      )
+
+      const workload = Object.fromEntries(
+        sorted.map((member) => [member.id, 0])
+      )
+
+      const roleCount = Object.fromEntries(
+        sorted.map((member) => [
+          member.id,
+          { Toko: 0, Sebar: 0 },
+        ])
+      )
+
+      const inserts = []
+
+      for (const item of dates) {
+        const { date, dateString, day } = item
+
+        const eligible = sorted.filter(
+          (member) => !off.has(`${member.id}|${dateString}`)
+        )
+
+        if (eligible.length < 3) {
+          continue
+        }
+
+        // Senin sampai Kamis: satu anggota Sebar,
+        // anggota lainnya bertugas di Toko.
+        // Jumat: semua anggota yang tersedia bertugas di Toko.
+        let sebarMember = null
+
+        if (date.getDay() >= 1 && date.getDay() <= 4) {
+          sebarMember = [...eligible].sort((a, b) => {
+            const roleDifference =
+              roleCount[a.id].Sebar - roleCount[b.id].Sebar
+
+            if (roleDifference !== 0) return roleDifference
+
+            const workloadDifference = workload[a.id] - workload[b.id]
+
+            if (workloadDifference !== 0) return workloadDifference
+
+            return (a.full_name || '').localeCompare(b.full_name || '')
+          })[0]
+        }
+
+        for (const member of eligible) {
+          const role =
+            sebarMember && member.id === sebarMember.id
+              ? 'Sebar'
+              : 'Toko'
+
+          inserts.push({
+            user_id: member.id,
+            team_id: member.team_id || 1,
+            schedule_date: dateString,
+            week_number: Math.floor((day - 1) / 7) + 1,
+            role_in_day: role,
+            status: 'scheduled',
+          })
+
+          workload[member.id] += 1
+          roleCount[member.id][role] += 1
+        }
+      }
+
+      if (!inserts.length) {
+        throw new Error(
+          'Tidak ada jadwal yang dapat dibuat. Periksa jumlah anggota aktif dan tanggal libur.'
+        )
+      }
+
+      // Hapus jadwal lama hanya dalam rentang yang akan dibuat ulang.
+      const { error: deleteError } = await supabase
+        .from('schedules')
+        .delete()
+        .gte(
+          'schedule_date',
+          `${month}-${String(from).padStart(2, '0')}`
+        )
+        .lte(
+          'schedule_date',
+          `${month}-${String(totalDays).padStart(2, '0')}`
+        )
+
+      if (deleteError) throw deleteError
+
+      // Masukkan jadwal per kelompok agar tidak mengirim
+      // terlalu banyak data dalam satu permintaan.
+      for (let i = 0; i < inserts.length; i += 200) {
+        const { error } = await supabase
+          .from('schedules')
+          .insert(inserts.slice(i, i + 200))
+
+        if (error) throw error
+      }
+
+      const summary = sorted
+        .map(
+          (member) =>
+            `${member.full_name}: Toko ${roleCount[member.id].Toko}, Sebar ${roleCount[member.id].Sebar}`
+        )
+        .join(' • ')
+
+      setMsg(
+        `Berhasil membuat ${inserts.length} entri jadwal untuk ${month}. Rekap tugas: ${summary}`
+      )
+    } catch (error) {
+      setBad(true)
+      setMsg(errText(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Shell
+      title="Generate Jadwal Bulanan"
+      desc="Atur libur rutin anggota dan rotasi tugas Toko/Sebar."
+    >
+      <Notice text={msg} bad={bad} />
+
+      <Card>
+        <form
+          className="p-5 flex flex-wrap items-end gap-3"
+          onSubmit={generate}
+        >
+          <div>
+            <label className="label">Bulan jadwal</label>
+            <input
+              className="input"
+              type="month"
+              value={month}
+              onChange={(e) => {
+                setMonth(e.target.value)
+                setStart('')
+              }}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="label">Mulai dari tanggal (opsional)</label>
+            <input
+              className="input"
+              type="date"
+              value={start}
+              min={`${month}-01`}
+              max={`${month}-${String(
+                new Date(
+                  Number(month.slice(0, 4)),
+                  Number(month.slice(5, 7)),
+                  0
+                ).getDate()
+              ).padStart(2, '0')}`}
+              onChange={(e) => setStart(e.target.value)}
+            />
+          </div>
+
+          <button className="btn-primary" disabled={busy}>
+            {busy ? 'Membuat jadwal...' : 'Generate Jadwal'}
+          </button>
+        </form>
+
+        <p className="px-5 pb-5 text-xs text-slate-500">
+          Senin–Kamis: satu anggota Sebar dan anggota lainnya Toko.
+          Jumat: anggota yang tersedia bertugas di Toko. Sabtu dan
+          Minggu tidak dijadwalkan. Jadwal pada rentang yang dipilih
+          akan diganti saat generate.
+        </p>
+      </Card>
+
+      <Card>
+        <div className="p-5 border-b border-slate-100">
+          <h2 className="font-bold">Atur libur rutin anggota</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Pilih satu hari dalam seminggu. Sistem akan menyimpan
+            seluruh tanggal hari tersebut untuk bulan yang dipilih.
+          </p>
+        </div>
+
+        <form
+          className="p-5 grid md:grid-cols-2 gap-3"
+          onSubmit={addHoliday}
+        >
+          <div>
+            <label className="label">Anggota</label>
+            <select
+              className="input"
+              value={holidayUser}
+              onChange={(e) => setHolidayUser(e.target.value)}
+              required
+            >
+              {members.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="label">Libur setiap hari</label>
+            <select
+              className="input"
+              value={holidayDay}
+              onChange={(e) => setHolidayDay(e.target.value)}
+              required
+            >
+              {dayNames.map((day, index) => (
+                <option key={day} value={String(index)}>
+                  {day}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="label">Catatan</label>
+            <input
+              className="input"
+              value={holidayNote}
+              onChange={(e) => setHolidayNote(e.target.value)}
+              placeholder="Contoh: Libur rutin"
+            />
+          </div>
+
+          <div className="flex items-end">
+            <button
+              className="btn-secondary flex items-center gap-2"
+              disabled={busy || !members.length}
+            >
+              <Plus size={16} />
+              Simpan libur rutin
+            </button>
+          </div>
+        </form>
+
+        <Table heads={['Anggota', 'Tanggal libur', 'Catatan', 'Aksi']}>
+          {holidays.map((holiday) => (
+            <tr key={holiday.id}>
+              <td className={td}>
+                {members.find(
+                  (member) => member.id === holiday.user_id
+                )?.full_name || holiday.user_id}
+              </td>
+
+              <td className={td}>{fmt(holiday.holiday_date)}</td>
+
+              <td className={td}>{holiday.note || '-'}</td>
+
+              <td className={td}>
+                <button
+                  type="button"
+                  className="text-red-600"
+                  onClick={() => deleteHoliday(holiday.id)}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </td>
+            </tr>
+          ))}
+
+          {!holidays.length && (
+            <tr>
+              <td
+                colSpan="4"
+                className="px-4 py-6 text-center text-slate-500"
+              >
+                Belum ada hari libur bulan ini.
+              </td>
+            </tr>
+          )}
+        </Table>
+      </Card>
+    </Shell>
+  )
 }
 
 export function Laporan(){
