@@ -1,0 +1,24 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mengarahkan ke jadwal kerja</title>
+</head>
+<body>
+  <p>Membuka halaman jadwal kerja...</p>
+  <script>
+    var base = '/jadwal-bintaro/';
+    var requestedUrl =
+      window.location.pathname +
+      window.location.search +
+      window.location.hash;
+
+    var redirectUrl =
+      base + '?redirect=' + encodeURIComponent(requestedUrl);
+
+    window.location.replace(redirectUrl);
+  </script>
+</body>
+</html>
